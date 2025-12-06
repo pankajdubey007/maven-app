@@ -75,4 +75,20 @@ pipeline {
             echo "Pipeline failed — Check logs."
         }
     }
+    pipeline {
+    	agent any
+
+    	tools {
+        jdk 'jdk-21'
+        maven 'maven-3.9.9'
+   	 }
+    stages {
+        stage('Build') {
+            steps {
+                sh 'mvn -version'
+                sh 'mvn clean package -DskipTests'
+            }
+        }
+    }
+ }
 }
