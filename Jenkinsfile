@@ -1,13 +1,8 @@
 pipeline {
     agent any
 
-    tools {
-        jdk 'jdk-21'
-        maven 'maven-3.9.9'
-    }
-
     environment {
-        IMAGE_REPO = "pankajdubey007/maven-app"
+        IMAGE_REPO = "rferns/maven-app"
         IMAGE_TAG  = "${env.BUILD_NUMBER}"
         FULL_IMAGE = "${IMAGE_REPO}:${IMAGE_TAG}"
 
@@ -19,43 +14,31 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/pankajdubey007/maven-app.git', branch: 'main'
-            }
-        }
-
-        stage('Verify Tools') {
-            steps {
-                sh """
-                    echo "Checking Maven..."
-                    which mvn
-                    mvn -version
-
-                    echo "Checking Java..."
-                    which java
-                    java -version
-                """
+                git url: 'https://github.com/rferns0008/maven_app.git', branch: 'main'
             }
         }
 
         stage('Build Maven App') {
             steps {
-                sh "mvn clean package -DskipTests"
+                sh """
+                    mvn clean package -DskipTests
+                """
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh "docker build -t ${FULL_IMAGE} ."
+                sh """
+                    docker build -t ${FULL_IMAGE} .
+                """
             }
         }
 
         stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DC_USER',
-                    passwordVariable: 'DC_PASS'
-                )]) {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DC_USER', passwordVariable: 'DC_PASS')]) {
+
                     sh """
                         echo "$DC_PASS" | docker login -u "$DC_USER" --password-stdin
                         docker push ${FULL_IMAGE}
@@ -67,11 +50,9 @@ pipeline {
 
         stage('Deploy App to EC2 via Ansible') {
             steps {
-                withCredentials([sshUserPrivateKey(
-                    credentialsId: 'ansible-ssh-key',
-                    keyFileVariable: 'SSH_KEY',
-                    usernameVariable: 'SSH_USER'
-                )]) {
+                withCredentials([sshUserPrivateKey(credentialsId: 'ansible-ssh-key',
+                    keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+
                     sh """
                         export ANSIBLE_HOST_KEY_CHECKING=False
                         cp ${SSH_KEY} ./key.pem
@@ -95,4 +76,3 @@ pipeline {
         }
     }
 }
-
