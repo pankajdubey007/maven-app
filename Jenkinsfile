@@ -1,73 +1,78 @@
 pipeline {
     agent any
- 
-    tools {
-        jdk 'jdk21'
-    }
- 
+
     environment {
-        PATH = "${env.JAVA_HOME}/bin:/opt/maven/bin:${env.PATH}"
-        DOCKER_IMAGE = 'simple-java-maven-app:latest'
+        IMAGE_REPO = "rferns/maven-app"
+        IMAGE_TAG  = "${env.BUILD_NUMBER}"
+        FULL_IMAGE = "${IMAGE_REPO}:${IMAGE_TAG}"
+
+        ANSIBLE_PLAY = "./ansible/deploy.yml"
+        ANSIBLE_INV  = "./ansible/hosts.ini"
     }
- 
+
     stages {
- 
-        stage('Debug Java') {
-            steps {
-                sh 'java -version'
-                sh 'echo JAVA_HOME=$JAVA_HOME'
-            }
-        }
- 
+
         stage('Checkout Code') {
             steps {
-                git 'https://github.com/pankajdubey007/maven-app.git, branch: 'main'
+                git url: 'https://github.com/pankajdubey007/maven-app.git', branch: 'main'
             }
         }
- 
-        stage('Build Maven Project') {
+
+        stage('Build Maven App') {
             steps {
-                sh 'mvn clean package -DskipTests'
+                sh """
+                    mvn clean package -DskipTests
+                """
             }
         }
- 
+
         stage('Build Docker Image') {
             steps {
-                sh '''
-                    docker build -t $DOCKER_IMAGE .
-                '''
+                sh """
+                    docker build -t ${FULL_IMAGE} .
+                """
             }
         }
- 
-        stage('Cleanup Docker') {
+
+        stage('Push Docker Image') {
             steps {
-                sh '''
-                    docker stop simple-java-app || true
-                    docker rm simple-java-app || true
- 
-                    dangling=$(docker images -f "dangling=true" -q)
-                    if [ -n "$dangling" ]; then
-                        docker rmi -f $dangling || true
-                    fi
-                '''
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DC_USER', passwordVariable: 'DC_PASS')]) {
+
+                    sh """
+                        echo "$DC_PASS" | docker login -u "$DC_USER" --password-stdin
+                        docker push ${FULL_IMAGE}
+                        docker logout
+                    """
+                }
             }
         }
- 
-        stage('Run Docker Container') {
+
+        stage('Deploy App to EC2 via Ansible') {
             steps {
-                sh '''
-                    docker run -d --name simple-java-app -p 8081:8080 $DOCKER_IMAGE
-                '''
+                withCredentials([sshUserPrivateKey(credentialsId: 'ansible-ssh-key',
+                    keyFileVariable: 'SSH_KEY', usernameVariable: 'SSH_USER')]) {
+
+                    sh """
+                        export ANSIBLE_HOST_KEY_CHECKING=False
+                        cp ${SSH_KEY} ./key.pem
+                        chmod 600 ./key.pem
+
+                        ansible-playbook ${ANSIBLE_PLAY} -i ${ANSIBLE_INV} \
+                        --private-key ./key.pem \
+                        --extra-vars "docker_image=${FULL_IMAGE}"
+                    """
+                }
             }
         }
     }
- 
+
     post {
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Pipeline completed successfully! Deployed: ${FULL_IMAGE}"
         }
         failure {
-            echo 'Pipeline failed.'
+            echo "Pipeline failed — Check logs."
         }
     }
 }
