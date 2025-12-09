@@ -6,7 +6,7 @@ pipeline {
     }
  
     environment {
-        PATH = "${env.JAVA_HOME}/bin:/opt/maven/bin:${env.PATH}"
+        PATH = "${env.JAVA_HOME}/bin:/opt/maven/bin:${env.PATH}" , branch: 'main'
         DOCKER_IMAGE = 'simple-java-maven-app:latest'
     }
  
