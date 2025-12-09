@@ -14,7 +14,7 @@ pipeline {
 
         stage('Checkout Code') {
             steps {
-                git url: 'https://github.com/rferns0008/maven_app.git', branch: 'main'
+                git url: 'https://github.com/pankajdubey007/maven-app.git', branch: 'main'
             }
         }
 
